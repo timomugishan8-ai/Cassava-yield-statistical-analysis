@@ -1,0 +1,420 @@
+---
+title: "Cassava_Yield_Data_Analysis"
+author: "Group 3: Mugisha Timothy – S25B38/041, Lamara Megan – M25B38/005, Nagasha Erwin – M25B38/038, Jjengo Timothy – S25B38/017, Daniella Namugga – M25B38/007, Ndambiire Harry – M25B38/030"
+
+date: "25-09-2026"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = "T:/MUGISHA TIMOTHY NAABAASA/YEAR 2 SEMESTER 1/Big Data Analytics and Technologies/Assignments/Group_3")
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+
+
+#Install and run libraries
+```{r - Libraries}
+# Install once
+#install.packages(c("tidyverse","readxl","skimr","janitor","GGally","rstatix","car","patchwork"))
+#install.packages("tinytex")
+#tinytex::install_tinytex()
+# Load every session
+library(tidyverse)
+library(readxl)
+library(skimr)
+library(janitor)
+library(GGally)
+library(rstatix)
+library(car)
+library(patchwork)
+```
+
+
+
+```{r read excel dataset}
+df <- read_excel("Cassava_Yield_Data.xlsx")
+
+```
+
+
+```{r clean column names}
+df <- clean_names(df)
+```
+
+
+```{r display first few rows}
+df
+```
+
+
+
+############################### DATA EXPLORATION,INSPECTION,AND CLEANING #############################################
+#Dataset understanding
+
+1. str()
+
+Displays variable type and sample values.
+```{r structure}
+str(df)
+```
+
+2. dim()
+
+Returns rows and columns.
+```{r dimensions}
+dim(df)
+```
+
+3. names()
+
+Lists variable names.
+
+```{r column names}
+names(df)
+```
+
+4. glimpse()
+
+A tidyverse version of str() that's easier to read.
+
+```{r data types}
+glimpse(df)
+```
+
+Next, we will convert certain types of variables inot the correct data type. R sometimes imports categorical variables as numerical values or text. Statistical tests require them to be factors. We use factors for conversion because factors tell R to treat variables as categories instead of numeric variables. Doing this will enable us to use statistical methods like ANOVA, chi-square tests, and grouped visualizations. 
+
+```{r Convert to categories}
+df <- df%>% mutate(sesn = as.factor(sesn), locn=as.factor(locn), block=as.factor(block), rep=as.factor(rep), tillage=as.factor(tillage), fer_t=as.factor(fer_t))
+
+glimpse(df)
+```
+
+
+
+#Descriptive Statistics
+
+#> The skim function produces mean, median, standard deviation, min, max, missing values, and histograms inside the console
+```{r skim the dataset}
+skim(df)
+```
+
+
+**Observation**: The descriptive statistics show the central tendency, spread, minimum and maximum values, and distribution of each numeric variable. Yield-related variables exhibit noticeable variability across cassava plots, suggesting differences in field performance among treatments and locations. 
+
+
+
+
+#MISSING VALUES
+```{r missing values in each variable}
+round(colMeans(is.na(df))*100,2)
+```
+
+
+**Observation**: As shown, the cassava dataset variables have no missing values, meaning we can proceed with analysis without applying imputation or deleting observations. The dataset is complete, and no information was lost due to missing-value handling.
+
+
+#DETECT DUPLICATES
+```{r Duplicate rows}
+duplicate_rows <- duplicated(df)
+sum(duplicate_rows)
+df[duplicate_rows, ]
+```
+
+
+**Observation**: No duplicate rows were identified in the dataset. Every observation corresponds to a unique cassava field record. Duplicate removal is not required before analysis.
+
+
+#DISTRIBUTION OF ALL VARIABLES
+
+1. Numerical Variables
+```{r Continuous variables - Histogram}
+numeric_vars <- df %>% select(where(is.numeric))
+
+numeric_vars %>% pivot_longer(cols = everything()) %>% ggplot(aes(value)) + 
+  geom_histogram(bins = 25, fill = "tomato",color = "white") +
+  facet_wrap(~name, scales = "free") +
+  labs(title = "Distribution of Continuous Variables",x = "Value",y = "Frequency") +theme_minimal()
+```
+
+
+**Observation**:The histograms reveal that yield variables are positively skewed/skewed to the left rather than perfectly bell-shaped. Some variables contain a few unusually high values, suggesting potential outliers and possible departures from normality. The spread across observations indicates substantial variation in cassava productivity among sampled plots.Thus we conclude that continuous variables require formal normality testing before choosing between parametric and non-parametric statistical tests.
+
+
+2.Categorical Variables
+```{r Categorical Variables - Bar charts}
+categorical_vars <- df %>% select(where(is.factor))
+
+categorical_vars %>% pivot_longer(cols = everything()) %>% ggplot(aes(value)) + geom_bar(fill = "forestgreen") +
+  facet_wrap(~name, scales = "free") +
+  labs(title = "Distribution of Categorical Variables", x = "Category", y = "Count") +theme_minimal()
+```
+
+
+**Observation**: The categorical bar charts show the frequency distribution of each category. The observations appear reasonably balanced across seasons, tillage methods, fertilizer treatments, and locations, reducing the likelihood that one category dominates the analysis. Thus the categorical variables contain sufficient observations in each category for comparative statistical testing and visualization.
+
+
+
+#DETECT OUTLIERS
+
+```{r Outlier detection}
+numeric_vars %>% pivot_longer(cols = everything()) %>% ggplot(aes(x="", y=value)) + geom_boxplot(fill = "orange") +
+  facet_wrap(~name, scales="free") + theme_minimal()
+```
+
+
+**Observation**: The boxplots identify a few observations lying beyond the whiskers in several yield variables. These values are statistically classified as outliers using the 1.5 × IQR rule, but they may represent genuine high- or low-performing cassava plots rather than recording errors. Basically, outliers exist in the dataset and should be managed carefully without immediately removing valid agricultural observations.
+
+
+#TRANSFORMATION OF THE DATA WITH OUTLIERS
+
+1. Winsorization - This caps extreme values instead of deleting them.
+```{r winsorization}
+df_clean <- df
+
+winsorize <- function(x){
+
+  q1 <- quantile(x,0.25,na.rm=TRUE)
+  q3 <- quantile(x,0.75,na.rm=TRUE)
+
+  iqr <- q3-q1
+
+  lower <- q1 - 1.5*iqr
+  upper <- q3 + 1.5*iqr
+
+  x <- ifelse(x<lower, lower, x)
+  x <- ifelse(x>upper, upper, x)
+
+  x
+}
+
+df_clean <- df_clean %>% mutate(across(where(is.numeric), winsorize))
+
+```
+
+Note: Another option would be to remove outliers, but in this case it will not be necessary. 
+
+
+#VERIFY CLEANED WORK
+```{r Confirm the data transformation}
+df_clean %>% select(where(is.numeric)) %>% pivot_longer(cols = everything()) %>% ggplot(aes("", value))+
+  geom_boxplot(fill="skyblue") + facet_wrap(~name, scales="free")+
+  theme_minimal()
+```
+
+
+**Observation**: After winsorization, extreme values were reduced while preserving all observations.
+
+
+
+
+
+############################### TESTING RELATIONSHIPS #############################################
+
+#1.a) TWO CONTINUOUS VARIABLES (total_weightperhectare, total_tuberper_hectare)
+
+```{r Scatter plot}
+ggplot(df_clean, aes(x = total_tuberper_hectare, y = total_weightperhectare)) + geom_point(color = "darkgreen", size = 2) +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+
+  theme_minimal() +
+
+  labs(title = "Relationship between Tuber Yield and Weight Yield", x = "Total Tubers per Hectare", 
+       y = "Total Weight per Hectare")
+
+```
+
+#b) Carry out Normality test
+```{r}
+shapiro.test(df_clean$total_weightperhectare)
+shapiro.test(df_clean$total_tuberper_hectare)
+```
+
+
+**Observation**: Both variables violate normality, so Spearman correlation is appropriate.
+
+
+#c) Carry out Spearman Correlation test
+
+```{r Spearman test}
+cor.test(df_clean$total_weightperhectare, df_clean$total_tuberper_hectare, method = "spearman")
+
+```
+
+
+**Deduction**: The scatter plot shows a positive monotonic relationship. Spearman's rho is about **0.649** with **p < 0.001**, indicating a statistically significant moderate-to-strong positive relationship.  
+
+
+
+#2.a) CONTINUOUS VARIABLE vs CATEGORICAL VARIABLE (total_weightperhectare, tillage(conv, minimum))
+```{r Box plot}
+
+ggplot(df_clean,aes(x = tillage, y = total_weightperhectare, fill = tillage))+
+
+  geom_boxplot()+
+
+  theme_minimal()+
+
+  labs(title="Cassava Yield by Tillage Method", x="Tillage Method", y="Weight per Hectare")
+
+
+```
+
+
+**Observation**: Why are there still outliers after winsorization? Winsorization caps extreme values but does not guarantee that all observations fall inside the boxplot whiskers. Boxplots use the 1.5×IQR rule, so some observations remain statistical outliers despite being valid measurements.
+
+
+#b) Check for normality
+```{r}
+by(df_clean$total_weightperhectare, df_clean$tillage, shapiro.test)
+```
+
+
+**Observation**: Both variables violate normality, so Man-Whitney U test is appropriate.
+
+#b) Carry out the Man-Whitney U test (because the categorical variable has only two groups)
+```{r Man-Whitney-U test}
+wilcox.test(total_weightperhectare ~ tillage, data = df_clean)
+
+```
+
+
+**DEDUCTION**: The boxplot shows overlapping interquartile ranges and similar medians for conventional and minimum tillage. Remaining outliers still appear because boxplots identify values beyond 1.5×IQR even after winsorization. Mann-Whitney produced **p ≈ 0.484**, indicating no statistically significant yield difference between tillage methods.
+
+
+
+
+#3.a) 2 CATEGORICAL VARIABLES (tillage, fert)
+```{r Stacked bar chart}
+ggplot(df_clean, aes(x=tillage, fill=fer_t)) + geom_bar(position="stack")+
+
+  labs(title="Fertilizer Treatments by Tillage Method", y="Count")+
+
+  theme_minimal()
+
+```
+
+```{r Side by side bar chart}
+
+ggplot(df_clean, aes(tillage, fill=fer_t)) + geom_bar(position="dodge")
+```
+
+
+#b) Carry out the Chi-square test (tests independence between 2 categorical variables)
+```{r Chi-square test}
+tbl <- table(df_clean$tillage, df_clean$fer_t)
+chisq.test(tbl)
+
+```
+
+
+**DEDUCTION**: The stacked and grouped bar charts indicate fertilizer treatments are distributed similarly across conventional and minimum tillage methods. No treatment appears concentrated within a single tillage category. The Chi-square test produced **p = 1.00**, showing no statistically significant association between tillage method and fertilizer treatment. The observed frequencies are consistent with random variation rather than dependence.
+
+
+
+############################### RECOMMENDATIONS #############################################
+
+#1. Does fertilizer application affect the projected “TotalWeightperhectare” and the "TotalTuberperHectare"
+```{r Total weight per hectare}
+ggplot(df_clean, aes(x = fer_t, y = total_weightperhectare, fill = fer_t)) +
+    geom_boxplot() +
+    labs(title = "Effect of Fertilizer on Total Weight per Hectare", x = "Fertilizer Treatment", 
+         y = "Total Weight per  Hectare")+
+    theme_minimal()
+```
+
+```{r Total tubers per hectare}
+ggplot(df_clean, aes(x = fer_t, y = total_tuberper_hectare, fill = fer_t)) +
+    geom_boxplot() +
+    labs(title = "Effect of Fertilizer on Total Tubers per Hectare", x = "Fertilizer Treatment",
+         y = "Total Tubers per Hectare") +
+    theme_minimal()
+```
+
+#Check for normality
+```{r}
+by(df_clean$total_weightperhectare, df$fer_t, shapiro.test)
+by(df_clean$total_tuberper_hectare, df$fer_t, shapiro.test)
+```
+
+**Observation:** Normality is violated in a number of fertilizer groups, so Kruskal-Wallis is preferred.
+
+
+```{r Kruskal-Wallis testing}
+kruskal_weight<-kruskal.test(total_weightperhectare ~ fer_t, data=df_clean)
+kruskal_weight
+
+kruskal_tubers<-kruskal.test(total_tuberper_hectare ~ fer_t, data=df_clean)
+kruskal_tubers
+```
+
+
+**DEDUCTION**: The fertilizer boxplots show different median yields across treatments. Kruskal-Wallis returned **p ≈ 0.041** on total weight per hectare, indicating fertilizer treatment has a significant effect on cassava yield.
+
+
+
+#2. Does the tillage method (“conv” and “minimum”) affect the projected “TotalWeightperhectare” and "TotalTuberperHectare"
+```{r Total-weight-per-hectare}
+ggplot(df_clean, aes(x = tillage, y = total_weightperhectare, fill = tillage)) +
+  geom_boxplot() +
+  labs(title = "Effect of Tillage on Total Weight per Hectare", x = "Tillage Method", y = "Total Weight per Hectare") +
+  theme_minimal()
+```
+
+
+```{r Total-tubers-per-hectare}
+ggplot(df_clean, aes(x = tillage, y = total_tuberper_hectare, fill = tillage)) +
+  geom_boxplot() +
+  labs(title = "Effect of Tillage on Total Tubers per Hectare", x = "Tillage Method", y = "Total Tubers per Hectare") +
+  theme_minimal()
+```
+
+
+```{r Compare group means}
+df_clean %>%
+  group_by(tillage) %>%
+  summarise(
+    mean_weight = mean(total_weightperhectare, na.rm = TRUE),
+    sd_weight = sd(total_weightperhectare, na.rm = TRUE),
+    mean_tubers = mean(total_tuberper_hectare, na.rm = TRUE),
+    sd_tubers = sd(total_tuberper_hectare, na.rm = TRUE)
+  )
+
+```
+
+#Check normality
+```{r}
+by(df_clean$total_weightperhectare, df$tillage, shapiro.test)
+by(df_clean$total_tuberper_hectare, df$tillage, shapiro.test)
+```
+**Observation:** Normality is violated in most of the results, so Man-Whitney U test is preferred.
+
+
+
+```{r Man-Whitney U test}
+wilcox.test(total_weightperhectare ~ tillage, data = df_clean)
+
+wilcox.test(total_tuberper_hectare ~ tillage, data = df_clean)
+
+```
+
+
+**DEDUCTION**: Mann-Whitney U returned **p ≈ 0.479** and **p ≈ 0.196**. There is no significant difference in cassava yield between conventional and minimum tillage.
+
+
+# OVERALL CONCLUSION
+
+The cassava yield dataset was complete, with **no missing values and no duplicate observations**. Winsorization reduced the influence of extreme values while preserving all observations for analysis.
+
+The analysis identified a **statistically significant positive relationship** between Total Tubers per Hectare and Total Weight per Hectare, meaning fields that produced more tubers generally produced higher yields. Fertilizer treatment significantly influenced cassava yield, whereas tillage method did not produce a statistically significant difference. The Chi-square analysis also showed fertilizer treatment was independent of tillage method.
+
+## Practical Recommendation to the Soroti Farmer
+
+1. Use the fertilizer treatment associated with the highest median yield because fertilizer significantly affects cassava productivity.
+2. Adopt agronomic practices that increase tuber formation, since higher tuber counts are associated with greater harvest weight.
+3. Choose conventional or minimum tillage based on labour availability, cost and soil conservation goals because this dataset did not show a significant yield advantage for either tillage method.
+
