@@ -75,6 +75,8 @@ The relationship between:
 
 was examined using a scatterplot and Spearman's rank correlation.
 
+![ScatterPlot findings](Output/scatterplot.png)
+
 Because the variables did not satisfy the normality assumption, Spearman correlation was used.
 
 **Result:**
@@ -96,6 +98,8 @@ Cassava yield was compared across the two tillage methods:
 
 Boxplots were used to compare the distributions, followed by normality testing and the Mann–Whitney U test.
 
+![BoxPlot findings](Output/boxplot.png)
+
 For total weight per hectare:
 
 > p ≈ 0.484
@@ -116,6 +120,10 @@ The relationship between:
 * `fer_t`
 
 was examined using stacked and grouped bar charts.
+
+![Stacked Bar chart findings](Output/stackedbar.png)
+
+![Grouped Bar chart findings](Output/groupedbar.png)
 
 A Chi-square test of independence was then performed.
 
