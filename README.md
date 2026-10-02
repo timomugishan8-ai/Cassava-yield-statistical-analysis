@@ -231,7 +231,7 @@ To reproduce the analysis:
 
 ## Author
 
-**Timothy Mugisha**
+**Mugisha Timothy Naabaasa**
 
 Data Science & Analytics Student
 Uganda Christian University
